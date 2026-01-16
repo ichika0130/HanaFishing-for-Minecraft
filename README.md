@@ -17,5 +17,15 @@ Englsih below<br>
 失败则会<br>
 <img width="1920" height="991" alt="2026-01-16_02 02 33" src="https://github.com/user-attachments/assets/183595d5-1d16-4057-be46-b06322e49848" />
 
+然后还加入了鱼饵<br>
+面包块 和 蚯蚓
+<img width="356" height="190" alt="image" src="https://github.com/user-attachments/assets/a0e8fd5d-fa68-40fb-84d8-b9c2ef16a850" /><img width="251" height="190" alt="image" src="https://github.com/user-attachments/assets/7741ee70-3d71-4583-ac89-524d9a85da6b" />
+面包块是又一个面包在合成台分解成4个面包块
+蚯蚓是挖泥土有概率出
+（材质目前还没上）
+
+把鱼饵放在副手即可使用 在抛钩时会有相关提示
+<img width="313" height="68" alt="image" src="https://github.com/user-attachments/assets/4ad0d0db-d2d5-433a-99e2-2059fbbe8a56" />
+
 English version:
 I think you can use translator for it
