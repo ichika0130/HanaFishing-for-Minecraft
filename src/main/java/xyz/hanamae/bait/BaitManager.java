@@ -33,7 +33,7 @@ public class BaitManager {
             List<String> lore = new ArrayList<>();
             lore.add("§7稀有鱼上钩率: §a+" + (int)(type.getBonus() * 100) + "%");
             lore.add("");
-            lore.add("§8[Project Tidal Whispers]");
+//            lore.add("§8[HanaFishing]");  这里可以加一些内容
             meta.setLore(lore);
 
             meta.getPersistentDataContainer().set(baitKey, PersistentDataType.STRING, type.getId());
