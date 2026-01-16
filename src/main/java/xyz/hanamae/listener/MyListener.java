@@ -1,10 +1,10 @@
 package xyz.hanamae.listener;
 
-import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.FishHook;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -49,23 +49,12 @@ public class MyListener implements Listener {
     );
 
     @EventHandler
-    void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1, 1);
-        int hour = LocalTime.now().getHour();
-        String greeting = (hour >= 5 && hour < 11) ? "早上好！" : (hour >= 11 && hour < 14) ? "中午好！" : (hour >= 14 && hour < 18) ? "下午好！" : (hour >= 18 && hour < 23) ? "晚上好！" : "夜深了，注意休息哦！";
-        player.sendTitle("§6" + greeting, "§f欢迎回到服务器，" + player.getName(), 10, 70, 20);
-    }
-
-    @EventHandler
     public void onFish(PlayerFishEvent event) {
         Player player = event.getPlayer();
 
-        // 将状态改为 BITE (鱼咬钩，浮标下沉时)
+        // 1. 咬钩判定
         if (event.getState() == PlayerFishEvent.State.BITE) {
-            double chance = 0.2; // 基础概率
-
-            // 检查鱼竿加成
+            double chance = 0.2;
             ItemStack rod = player.getInventory().getItemInMainHand();
             if (rod == null || rod.getType() != Material.FISHING_ROD) {
                 rod = player.getInventory().getItemInOffHand();
@@ -76,29 +65,29 @@ public class MyListener implements Listener {
                 chance = Math.min(1.0, chance + (luckLevel * 0.05));
             }
 
-            // 判定是否触发史诗鱼
             if (ThreadLocalRandom.current().nextDouble() < chance) {
-                // 重要：取消收杆动作，防止玩家点一下右键就把浮标收了
-                // 注意：在 BITE 状态取消事件，浮标通常会留在水里或消失，取决于具体版本
-                // 我们通过启动小游戏来接管玩家的操作
-
                 player.playSound(player.getLocation(), Sound.BLOCK_ANVIL_LAND, 1, 1);
-
-                // 启动小游戏
-                FishingTask task = new FishingTask(player, createEpicFish());
+                // 修正：在这里传入 event.getHook()
+                FishingTask task = new FishingTask(player, createEpicFish(), event.getHook());
                 task.runTaskTimer(plugin, 0L, 1L);
                 activeGames.put(player.getUniqueId(), task);
-
-                // 提醒玩家：鱼已经咬钩了！
                 player.sendTitle("§c§l咬钩了！", "§e立刻按住 [SHIFT] 开始角力", 0, 40, 10);
             }
         }
 
-        // 防止玩家在小游戏进行中通过正常的钓鱼逻辑收杆
-        if (event.getState() == PlayerFishEvent.State.CAUGHT_FISH || event.getState() == PlayerFishEvent.State.IN_GROUND) {
+        // 2. 收钩判定
+        if (event.getState() == PlayerFishEvent.State.CAUGHT_FISH) {
             if (activeGames.containsKey(player.getUniqueId())) {
                 event.setCancelled(true);
+                return;
             }
+            if (event.getCaught() instanceof Item itemEntity) {
+                player.sendTitle("§a收杆成功", "§7你钓到了: §f" + getItemName(itemEntity.getItemStack()), 10, 40, 10);
+            }
+        }
+
+        if (event.getState() == PlayerFishEvent.State.IN_GROUND && activeGames.containsKey(player.getUniqueId())) {
+            event.setCancelled(true);
         }
     }
 
@@ -133,22 +122,21 @@ public class MyListener implements Listener {
     private class FishingTask extends BukkitRunnable {
         private final Player player;
         private final ItemStack fish;
+        private final FishHook hook; // 变量定义
         private int barPos = 0;
         private boolean forward = true;
         private int tickCounter = 0;
         private int gracePeriod = 80;
-
-        // 新增：折返次数计数
         private int directionSwitches = 0;
-        private final int maxSwitches = 2; // 走一个来回（左->右，右->左）就结束
-
+        private final int maxSwitches = 2;
         private final int barLength = 35;
         private final Set<Integer> targetIndices = new HashSet<>();
 
-        public FishingTask(Player player, ItemStack fish) {
+        // 修正：构造函数现在正确接收 FishHook 参数
+        public FishingTask(Player player, ItemStack fish, FishHook hook) {
             this.player = player;
             this.fish = fish;
-            // 随机生成 3 段实心判定区
+            this.hook = hook; // 现在可以正确初始化了
             for (int i = 0; i < 3; i++) {
                 int seed = ThreadLocalRandom.current().nextInt(5, barLength - 5);
                 targetIndices.add(seed);
@@ -161,7 +149,6 @@ public class MyListener implements Listener {
         public void run() {
             if (!player.isOnline()) { cleanup(); return; }
 
-            // 1. 宽限期
             if (gracePeriod > 0) {
                 if (!player.isSneaking()) {
                     gracePeriod--;
@@ -173,53 +160,40 @@ public class MyListener implements Listener {
                 return;
             }
 
-            // 2. 潜行检查
             if (!player.isSneaking()) {
                 player.sendTitle("§c§l× 脱钩了 ×", "§7你松开了按键", 0, 20, 5);
+                removeHook(); // 失败也要收钩
                 cleanup(); return;
             }
 
-            // 3. 移动逻辑与折返检测
             tickCounter++;
             if (tickCounter % 2 == 0) {
                 if (forward) {
                     barPos++;
-                    if (barPos >= barLength) {
-                        forward = false;
-                        directionSwitches++;
-                    }
+                    if (barPos >= barLength) { forward = false; directionSwitches++; }
                 } else {
                     barPos--;
-                    if (barPos <= 0) {
-                        forward = true;
-                        directionSwitches++;
-                    }
+                    if (barPos <= 0) { forward = true; directionSwitches++; }
                 }
 
-                // 检查是否超过最大折返次数
                 if (directionSwitches >= maxSwitches) {
                     player.sendTitle("§c§l× 鱼逃跑了 ×", "§7你犹豫太久了！", 5, 20, 5);
-                    cleanup();
-                    return;
+                    removeHook(); // 超时也要收钩
+                    cleanup(); return;
                 }
             }
 
-            // 4. 渲染界面 (实心黄区样式)
             StringBuilder bar = new StringBuilder("§8");
             for (int i = 0; i <= barLength; i++) {
                 if (i == barPos) {
-                    bar.append("§c§l⚓"); // 玩家红色鱼钩
+                    bar.append("§c§l⚓");
                 } else if (targetIndices.contains(i)) {
-                    // 使用加粗和特定字符模拟实心 |·| 效果
-                    // §n 是下划线，配合 §l 加粗可以填满空间
                     if (i % 2 == 0) bar.append("§e§l§n|");
                     else bar.append("§e§l§n·");
                 } else {
                     bar.append("§8|");
                 }
             }
-
-            // 在副标题显示剩余机会（进度提示）
             String progress = (directionSwitches == 0) ? "§a>>> 正在拉线" : "§6<<< 最后机会！";
             player.sendTitle(bar.toString(), progress, 0, 5, 0);
         }
@@ -227,7 +201,9 @@ public class MyListener implements Listener {
         public void checkHit() {
             if (gracePeriod > 20) {
                 player.sendTitle("§c§l太心急了！", "§f鱼还没咬稳", 5, 20, 5);
-                cleanup(); return;
+                removeHook();
+                cleanup();
+                return;
             }
 
             if (targetIndices.contains(barPos)) {
@@ -237,7 +213,17 @@ public class MyListener implements Listener {
             } else {
                 player.sendTitle("§c§l未命中！", "§f鱼挣脱了钩子", 5, 20, 5);
             }
+
+            removeHook(); // 无论中没中，最后都收钩
             cleanup();
+        }
+
+        // 封装一个收钩方法，增加真实感
+        private void removeHook() {
+            if (hook != null && !hook.isDead()) {
+                player.playSound(player.getLocation(), Sound.ENTITY_FISHING_BOBBER_RETRIEVE, 1.0f, 1.0f);
+                hook.remove();
+            }
         }
 
         private void cleanup() {

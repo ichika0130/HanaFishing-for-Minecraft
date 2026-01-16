@@ -1,4 +1,4 @@
-name: Test
+name: HanaFishing
 version: '1.0-SNAPSHOT'
 main: xyz.hanamae.fishing.Fishing
 api-version: '1.21'

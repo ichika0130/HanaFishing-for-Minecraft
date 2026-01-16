@@ -11,7 +11,7 @@ public final class Fishing extends JavaPlugin {
         // 这样 MyListener 才能创建 NamespacedKey
         getServer().getPluginManager().registerEvents(new MyListener(this), this);
 
-        getLogger().info("Hanamae Enable");
+        getLogger().info("HanaFishing Enable");
     }
 
     @Override
